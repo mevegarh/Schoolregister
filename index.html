@@ -4,11 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Digital Register & Parent Portal</title>
-  
-  <!-- Firebase SDKs for Cloud Persistence -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-
   <style>
     :root {
       --primary: #4f46e5;
@@ -47,7 +42,7 @@
     .btn-success { background: var(--success); color: #fff; }
     .btn-secondary { background: #e5e7eb; color: var(--text-dark); }
     .btn-secondary:hover { background: #d1d5db; }
-    .btn-danger { background: #fee2e2; color: var(--danger); border: 1px solid #fca5a5; padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    .btn-danger { background: #fee2e2; color: var(--danger); border: 1px solid #fca5a5; padding: 6px 10px; font-size: 0.8rem; border-radius: 6px; cursor: pointer; font-weight: 600; }
     .btn-icon { background: var(--primary); color: white; width: 38px; height: 38px; border-radius: 50%; border: none; font-size: 1.3rem; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.3); }
 
     /* Student List */
@@ -55,14 +50,14 @@
     .student-item { background: #f9fafb; border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
     .student-info h4 { font-size: 0.95rem; font-weight: 600; }
     .student-info p { font-size: 0.8rem; color: var(--text-muted); }
-    .attendance-actions { display: flex; align-items: center; gap: 12px; }
+    .attendance-actions { display: flex; align-items: center; gap: 8px; }
 
     /* Dynamic Subject Input Rows */
     .subject-row { display: flex; gap: 8px; margin-bottom: 8px; }
     .subject-row input { font-size: 0.85rem; padding: 8px 10px; }
     .btn-add-sub { background: #e0e7ff; color: var(--primary); border: none; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; width: auto; margin-bottom: 16px; }
 
-    /* Progress Card Styling */
+    /* ---------------- PROGRESS CARD STYLING ---------------- */
     .report-card-premium {
       background: #ffffff;
       border: 1px solid #e2e8f0;
@@ -169,14 +164,14 @@
     <div class="section-header">
       <div>
         <h3 id="display-teacher-class">Class Register</h3>
-        <input type="date" id="attendance-date" style="margin-top: 6px; width: auto; font-size: 0.8rem; padding: 4px 8px;">
+        <input type="date" id="attendance-date" onchange="renderStudentList()" style="margin-top: 6px; width: auto; font-size: 0.8rem; padding: 4px 8px;">
       </div>
       <button class="btn-icon" title="Add Student" onclick="showScreen('screen-add-student')">+</button>
     </div>
 
     <button class="btn btn-primary" onclick="showScreen('screen-progress-card')" style="margin-bottom: 16px;">View & Generate Progress Cards</button>
 
-    <div id="student-list-container">Loading students...</div>
+    <div id="student-list-container"></div>
   </div>
 
   <!-- 4. Add Student -->
@@ -200,7 +195,7 @@
       <h3>Progress Cards</h3>
       <button class="btn-icon" title="Create Progress Card" onclick="showScreen('screen-create-report')">+</button>
     </div>
-    <div id="progress-card-history">Loading reports...</div>
+    <div id="progress-card-history"></div>
     <button class="btn btn-secondary" onclick="showScreen('screen-teacher-dashboard')">Back to Register</button>
   </div>
 
@@ -272,65 +267,22 @@
 </div>
 
 <script>
-  // -----------------------------------------------------------------
-  // FIREBASE CONFIGURATION
-  // Replace these credentials with your keys from https://console.firebase.google.com/
-  // -----------------------------------------------------------------
-  const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
-  };
-
-  // Initialize Firebase
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
-
-  // Global States synced from Firebase
-  let students = [];
-  let attendanceLogs = [];
-  let reportCards = [];
+  // Persistent data initialization using LocalStorage
+  let students = JSON.parse(localStorage.getItem('app_students')) || [
+    { id: '1', name: 'Alex Johnson', phone: '9876543210' }
+  ];
+  let attendanceLogs = JSON.parse(localStorage.getItem('app_attendanceLogs')) || [];
+  let reportCards = JSON.parse(localStorage.getItem('app_reportCards')) || [];
   let currentParentPhone = '';
 
   document.getElementById('attendance-date').valueAsDate = new Date();
 
-  // -----------------------------------------------------------------
-  // REAL-TIME LISTENERS
-  // -----------------------------------------------------------------
-  db.ref('students').on('value', (snapshot) => {
-    const data = snapshot.val();
-    students = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
-    if (document.getElementById('screen-teacher-dashboard').classList.contains('active')) {
-      renderStudentList();
-    }
-  });
+  function saveData() {
+    localStorage.setItem('app_students', JSON.stringify(students));
+    localStorage.setItem('app_attendanceLogs', JSON.stringify(attendanceLogs));
+    localStorage.setItem('app_reportCards', JSON.stringify(reportCards));
+  }
 
-  db.ref('attendanceLogs').on('value', (snapshot) => {
-    const data = snapshot.val();
-    attendanceLogs = data ? Object.values(data) : [];
-    if (document.getElementById('screen-parent-dashboard').classList.contains('active')) {
-      renderParentDashboard();
-    }
-  });
-
-  db.ref('reportCards').on('value', (snapshot) => {
-    const data = snapshot.val();
-    reportCards = data ? Object.values(data) : [];
-    if (document.getElementById('screen-progress-card').classList.contains('active')) {
-      renderTeacherReports();
-    }
-    if (document.getElementById('screen-parent-dashboard').classList.contains('active')) {
-      renderParentDashboard();
-    }
-  });
-
-  // -----------------------------------------------------------------
-  // APP NAVIGATION & FUNCTIONS
-  // -----------------------------------------------------------------
   function showScreen(screenId) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(screenId).classList.add('active');
@@ -341,7 +293,6 @@
     if (screenId === 'screen-teacher-dashboard') renderStudentList();
     if (screenId === 'screen-create-report') populateStudentDropdown();
     if (screenId === 'screen-progress-card') renderTeacherReports();
-    if (screenId === 'screen-parent-dashboard') renderParentDashboard();
   }
 
   function goHome() {
@@ -349,8 +300,8 @@
   }
 
   function loginTeacher() {
-    const name = document.getElementById('teacher-name').value;
-    const cls = document.getElementById('teacher-class').value;
+    const name = document.getElementById('teacher-name').value.trim();
+    const cls = document.getElementById('teacher-class').value.trim();
     if (!name || !cls) return alert('Please enter Name and Class');
     
     document.getElementById('display-teacher-class').innerText = cls + " Register";
@@ -358,16 +309,32 @@
   }
 
   function addStudent() {
-    const name = document.getElementById('new-student-name').value;
-    const phone = document.getElementById('new-student-phone').value;
-    if (!name || !phone) return alert('Fill in all fields');
+    const nameInput = document.getElementById('new-student-name');
+    const phoneInput = document.getElementById('new-student-phone');
 
-    // Save student to cloud
-    db.ref('students').push({ name, phone });
+    const name = nameInput.value.trim();
+    const phone = phoneInput.value.trim();
 
-    document.getElementById('new-student-name').value = '';
-    document.getElementById('new-student-phone').value = '';
+    if (!name || !phone) return alert('Please fill in all student details');
+
+    // Create student and push to list
+    const newStudent = { id: Date.now().toString(), name, phone };
+    students.push(newStudent);
+    saveData();
+
+    // Reset input fields
+    nameInput.value = '';
+    phoneInput.value = '';
+
     showScreen('screen-teacher-dashboard');
+  }
+
+  function deleteStudent(studentId) {
+    if (confirm('Are you sure you want to delete this student?')) {
+      students = students.filter(s => s.id !== studentId);
+      saveData();
+      renderStudentList();
+    }
   }
 
   function renderStudentList() {
@@ -375,11 +342,15 @@
     container.innerHTML = '';
 
     if (students.length === 0) {
-      container.innerHTML = '<p style="color:#888;">No students added yet.</p>';
+      container.innerHTML = '<p style="color:#888; text-align:center; padding:15px;">No students added yet.</p>';
       return;
     }
 
+    const selectedDate = document.getElementById('attendance-date').value;
+
     students.forEach(student => {
+      const isPresent = attendanceLogs.some(log => log.phone === student.phone && log.date === selectedDate && log.status === 'Present');
+
       const item = document.createElement('div');
       item.className = 'student-item';
       item.innerHTML = `
@@ -389,9 +360,10 @@
         </div>
         <div class="attendance-actions">
           <label style="font-size:0.8rem; margin:0; cursor:pointer;">
-            <input type="checkbox" onchange="togglePresent('${student.name}', '${student.phone}', this.checked)"> Present
+            <input type="checkbox" ${isPresent ? 'checked' : ''} onchange="togglePresent('${student.name}', '${student.phone}', this.checked)"> Present
           </label>
           <button class="btn-danger" onclick="sendAbsentMsg('${student.name}', '${student.phone}')">Absent</button>
+          <button class="btn-danger" style="background:#fef2f2; border-color:#fca5a5;" onclick="deleteStudent('${student.id}')">Delete</button>
         </div>
       `;
       container.appendChild(item);
@@ -399,25 +371,31 @@
   }
 
   function togglePresent(studentName, phone, isChecked) {
+    const selectedDate = document.getElementById('attendance-date').value;
+    attendanceLogs = attendanceLogs.filter(log => !(log.phone === phone && log.date === selectedDate));
+
     if (isChecked) {
-      const msg = `Your child ${studentName} came to school today. Thanks for sending them to school.`;
-      const logData = { phone, studentName, message: msg, date: document.getElementById('attendance-date').value };
-      
-      // Push to Cloud Database
-      db.ref('attendanceLogs').push(logData);
-      alert(`[Synced & Sent to ${phone}]:\n"${msg}"`);
+      const msg = `Your child ${studentName} came to school on ${selectedDate}. Thanks for sending them!`;
+      attendanceLogs.push({ phone, studentName, message: msg, date: selectedDate, status: 'Present' });
+      saveData();
+      alert(`[SMS Sent to ${phone}]:\n"${msg}"`);
+    } else {
+      saveData();
     }
   }
 
   function sendAbsentMsg(studentName, phone) {
-    const msg = `Your child ${studentName} did not come to school today. Please send your child to school properly. Thank you.`;
-    const logData = { phone, studentName, message: msg, date: document.getElementById('attendance-date').value };
-    
-    // Push to Cloud Database
-    db.ref('attendanceLogs').push(logData);
-    alert(`[Synced & Sent to ${phone}]:\n"${msg}"`);
+    const selectedDate = document.getElementById('attendance-date').value;
+    attendanceLogs = attendanceLogs.filter(log => !(log.phone === phone && log.date === selectedDate));
+
+    const msg = `Your child ${studentName} did not come to school on ${selectedDate}. Please ensure regular attendance. Thank you.`;
+    attendanceLogs.push({ phone, studentName, message: msg, date: selectedDate, status: 'Absent' });
+    saveData();
+    alert(`[SMS Sent to ${phone}]:\n"${msg}"`);
+    renderStudentList();
   }
 
+  // Dynamic Subject Rows
   function addSubjectInputRow() {
     const container = document.getElementById('subject-rows-container');
     const row = document.createElement('div');
@@ -430,13 +408,27 @@
     container.appendChild(row);
   }
 
+  function resetSubjectRows() {
+    const container = document.getElementById('subject-rows-container');
+    container.innerHTML = `
+      <div class="subject-row">
+        <input type="text" class="sub-name" placeholder="Subject (e.g. Mathematics)">
+        <input type="number" class="sub-marks" placeholder="Marks (e.g. 88)" style="width: 100px;">
+        <input type="number" class="sub-max" placeholder="Max (100)" value="100" style="width: 90px;">
+      </div>
+    `;
+    document.getElementById('report-internal').value = '';
+  }
+
   function populateStudentDropdown() {
     const select = document.getElementById('report-student-select');
     select.innerHTML = '';
+    
     if (students.length === 0) {
       select.innerHTML = '<option value="">No students available</option>';
       return;
     }
+
     students.forEach(s => {
       select.innerHTML += `<option value="${s.phone}">${s.name}</option>`;
     });
@@ -445,7 +437,8 @@
   function sendReportCard() {
     const select = document.getElementById('report-student-select');
     const phone = select.value;
-    if (!phone) return alert('Please select a student');
+    
+    if (!phone) return alert('Please add and select a valid student first.');
 
     const studentName = select.options[select.selectedIndex].text;
     const internal = document.getElementById('report-internal').value || 'N/A';
@@ -460,20 +453,21 @@
     let totalMax = 0;
 
     for (let i = 0; i < names.length; i++) {
-      if (names[i].value && marks[i].value) {
+      if (names[i].value.trim() && marks[i].value !== '') {
         let obtained = parseFloat(marks[i].value);
         let max = parseFloat(maxes[i].value) || 100;
-        subjectList.push({ name: names[i].value, score: obtained, max: max });
+        subjectList.push({ name: names[i].value.trim(), score: obtained, max: max });
         totalObtained += obtained;
         totalMax += max;
       }
     }
 
-    if (subjectList.length === 0) return alert('Please enter at least one subject with marks');
+    if (subjectList.length === 0) return alert('Please enter at least one subject with valid marks.');
 
     let percentage = ((totalObtained / totalMax) * 100).toFixed(1);
 
     const reportData = {
+      id: Date.now().toString(),
       phone,
       studentName,
       subjects: subjectList,
@@ -485,20 +479,23 @@
       date: new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
     };
 
-    // Save Progress Card to Cloud Database
-    db.ref('reportCards').push(reportData);
-    alert(`Progress Card created and saved to cloud for ${studentName}!`);
+    reportCards.push(reportData);
+    saveData();
+
+    alert(`Progress Card created and sent to ${studentName}'s parent!`);
+    resetSubjectRows();
     showScreen('screen-progress-card');
   }
 
+  // Render Visual Progress Card Component
   function createReportCardHTML(card) {
-    let rowsHTML = card.subjects ? card.subjects.map(s => `
+    let rowsHTML = card.subjects.map(s => `
       <tr>
         <td>${s.name}</td>
         <td><strong>${s.score}</strong></td>
         <td style="color: var(--text-muted);">${s.max}</td>
       </tr>
-    `).join('') : '';
+    `).join('');
 
     return `
       <div class="report-card-premium">
@@ -542,7 +539,7 @@
     const container = document.getElementById('progress-card-history');
     container.innerHTML = '';
     if (reportCards.length === 0) {
-      container.innerHTML = '<p style="color:#888;">No progress cards issued yet.</p>';
+      container.innerHTML = '<p style="color:#888; text-align:center; padding:15px;">No progress cards issued yet.</p>';
       return;
     }
     reportCards.forEach(card => {
@@ -551,14 +548,14 @@
   }
 
   function loginParent() {
-    const parentName = document.getElementById('parent-name').value;
-    const childName = document.getElementById('parent-child-name').value;
-    const phone = document.getElementById('parent-phone').value;
+    const parentName = document.getElementById('parent-name').value.trim();
+    const childName = document.getElementById('parent-child-name').value.trim();
+    const phone = document.getElementById('parent-phone').value.trim();
 
     if (!parentName || !phone) return alert('Please enter required details');
 
     currentParentPhone = phone;
-    document.getElementById('parent-welcome-msg').innerText = `Welcome ${parentName} (${childName}'s Portal)`;
+    document.getElementById('parent-welcome-msg').innerText = `Welcome ${parentName} (${childName || 'Student'}'s Portal)`;
 
     renderParentDashboard();
     showScreen('screen-parent-dashboard');
