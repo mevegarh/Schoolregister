@@ -4,6 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Digital Register & Parent Portal</title>
+  
+  <!-- Firebase SDKs for Cloud Persistence -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
   <style>
     :root {
       --primary: #4f46e5;
@@ -57,7 +62,7 @@
     .subject-row input { font-size: 0.85rem; padding: 8px 10px; }
     .btn-add-sub { background: #e0e7ff; color: var(--primary); border: none; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; width: auto; margin-bottom: 16px; }
 
-    /* ---------------- PROGRESS CARD STYLING ---------------- */
+    /* Progress Card Styling */
     .report-card-premium {
       background: #ffffff;
       border: 1px solid #e2e8f0;
@@ -171,7 +176,7 @@
 
     <button class="btn btn-primary" onclick="showScreen('screen-progress-card')" style="margin-bottom: 16px;">View & Generate Progress Cards</button>
 
-    <div id="student-list-container"></div>
+    <div id="student-list-container">Loading students...</div>
   </div>
 
   <!-- 4. Add Student -->
@@ -195,7 +200,7 @@
       <h3>Progress Cards</h3>
       <button class="btn-icon" title="Create Progress Card" onclick="showScreen('screen-create-report')">+</button>
     </div>
-    <div id="progress-card-history"></div>
+    <div id="progress-card-history">Loading reports...</div>
     <button class="btn btn-secondary" onclick="showScreen('screen-teacher-dashboard')">Back to Register</button>
   </div>
 
@@ -267,15 +272,65 @@
 </div>
 
 <script>
-  let students = [
-    { id: '1', name: 'Alex Johnson', phone: '9876543210' }
-  ];
+  // -----------------------------------------------------------------
+  // FIREBASE CONFIGURATION
+  // Replace these credentials with your keys from https://console.firebase.google.com/
+  // -----------------------------------------------------------------
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+
+  // Initialize Firebase
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  // Global States synced from Firebase
+  let students = [];
   let attendanceLogs = [];
   let reportCards = [];
   let currentParentPhone = '';
 
   document.getElementById('attendance-date').valueAsDate = new Date();
 
+  // -----------------------------------------------------------------
+  // REAL-TIME LISTENERS
+  // -----------------------------------------------------------------
+  db.ref('students').on('value', (snapshot) => {
+    const data = snapshot.val();
+    students = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
+    if (document.getElementById('screen-teacher-dashboard').classList.contains('active')) {
+      renderStudentList();
+    }
+  });
+
+  db.ref('attendanceLogs').on('value', (snapshot) => {
+    const data = snapshot.val();
+    attendanceLogs = data ? Object.values(data) : [];
+    if (document.getElementById('screen-parent-dashboard').classList.contains('active')) {
+      renderParentDashboard();
+    }
+  });
+
+  db.ref('reportCards').on('value', (snapshot) => {
+    const data = snapshot.val();
+    reportCards = data ? Object.values(data) : [];
+    if (document.getElementById('screen-progress-card').classList.contains('active')) {
+      renderTeacherReports();
+    }
+    if (document.getElementById('screen-parent-dashboard').classList.contains('active')) {
+      renderParentDashboard();
+    }
+  });
+
+  // -----------------------------------------------------------------
+  // APP NAVIGATION & FUNCTIONS
+  // -----------------------------------------------------------------
   function showScreen(screenId) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(screenId).classList.add('active');
@@ -286,6 +341,7 @@
     if (screenId === 'screen-teacher-dashboard') renderStudentList();
     if (screenId === 'screen-create-report') populateStudentDropdown();
     if (screenId === 'screen-progress-card') renderTeacherReports();
+    if (screenId === 'screen-parent-dashboard') renderParentDashboard();
   }
 
   function goHome() {
@@ -306,7 +362,9 @@
     const phone = document.getElementById('new-student-phone').value;
     if (!name || !phone) return alert('Fill in all fields');
 
-    students.push({ id: Date.now().toString(), name, phone });
+    // Save student to cloud
+    db.ref('students').push({ name, phone });
+
     document.getElementById('new-student-name').value = '';
     document.getElementById('new-student-phone').value = '';
     showScreen('screen-teacher-dashboard');
@@ -342,19 +400,24 @@
 
   function togglePresent(studentName, phone, isChecked) {
     if (isChecked) {
-      const msg = `Your child ${studentName} is came to school. Thanks for sending him school.`;
-      attendanceLogs.push({ phone, studentName, message: msg, date: document.getElementById('attendance-date').value });
-      alert(`[SMS Sent to ${phone}]:\n"${msg}"`);
+      const msg = `Your child ${studentName} came to school today. Thanks for sending them to school.`;
+      const logData = { phone, studentName, message: msg, date: document.getElementById('attendance-date').value };
+      
+      // Push to Cloud Database
+      db.ref('attendanceLogs').push(logData);
+      alert(`[Synced & Sent to ${phone}]:\n"${msg}"`);
     }
   }
 
   function sendAbsentMsg(studentName, phone) {
-    const msg = `Your child ${studentName} is not came to school today please send your child to school properly. Thank you.`;
-    attendanceLogs.push({ phone, studentName, message: msg, date: document.getElementById('attendance-date').value });
-    alert(`[SMS Sent to ${phone}]:\n"${msg}"`);
+    const msg = `Your child ${studentName} did not come to school today. Please send your child to school properly. Thank you.`;
+    const logData = { phone, studentName, message: msg, date: document.getElementById('attendance-date').value };
+    
+    // Push to Cloud Database
+    db.ref('attendanceLogs').push(logData);
+    alert(`[Synced & Sent to ${phone}]:\n"${msg}"`);
   }
 
-  // Dynamic Subject Rows
   function addSubjectInputRow() {
     const container = document.getElementById('subject-rows-container');
     const row = document.createElement('div');
@@ -370,6 +433,10 @@
   function populateStudentDropdown() {
     const select = document.getElementById('report-student-select');
     select.innerHTML = '';
+    if (students.length === 0) {
+      select.innerHTML = '<option value="">No students available</option>';
+      return;
+    }
     students.forEach(s => {
       select.innerHTML += `<option value="${s.phone}">${s.name}</option>`;
     });
@@ -378,6 +445,8 @@
   function sendReportCard() {
     const select = document.getElementById('report-student-select');
     const phone = select.value;
+    if (!phone) return alert('Please select a student');
+
     const studentName = select.options[select.selectedIndex].text;
     const internal = document.getElementById('report-internal').value || 'N/A';
     const status = document.getElementById('report-status').value;
@@ -416,20 +485,20 @@
       date: new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
     };
 
-    reportCards.push(reportData);
-    alert(`Progress Card created and sent to ${studentName}'s parent!`);
+    // Save Progress Card to Cloud Database
+    db.ref('reportCards').push(reportData);
+    alert(`Progress Card created and saved to cloud for ${studentName}!`);
     showScreen('screen-progress-card');
   }
 
-  // Render Visual Progress Card Component
   function createReportCardHTML(card) {
-    let rowsHTML = card.subjects.map(s => `
+    let rowsHTML = card.subjects ? card.subjects.map(s => `
       <tr>
         <td>${s.name}</td>
         <td><strong>${s.score}</strong></td>
         <td style="color: var(--text-muted);">${s.max}</td>
       </tr>
-    `).join('');
+    `).join('') : '';
 
     return `
       <div class="report-card-premium">
