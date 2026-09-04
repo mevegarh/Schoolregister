@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Digital Register & Parent Portal</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background-color: #f4f6f9; color: #333; display: flex; justify-content: center; padding: 20px; }
+    .app-container { width: 100%; max-width: 600px; background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); overflow: hidden; }
+    
+    header { background: #2c3e50; color: #fff; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
+    header h2 { font-size: 1.2rem; }
+    .btn-back { background: #34495e; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+    
+    .screen { display: none; padding: 20px; }
+    .screen.active { display: block; }
+
+    /* Forms & Inputs */
+    .form-group { margin-bottom: 15px; }
+    label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9rem; }
+    input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; }
+    
+    /* Buttons */
+    .btn { width: 100%; padding: 12px; border: none; border-radius: 6px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: 0.2s; }
+    .btn-primary { background: #3498db; color: #fff; margin-bottom: 10px; }
+    .btn-success { background: #2ecc71; color: #fff; }
+    .btn-danger { background: #e74c3c; color: #fff; padding: 6px 10px; font-size: 0.85rem; width: auto; }
+    .btn-icon { background: #2ecc71; color: white; width: 40px; height: 40px; border-radius: 50%; border: none; font-size: 1.5rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+    /* Student List & Cards */
+    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+    .student-item { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    .student-info h4 { font-size: 1rem; margin-bottom: 3px; }
+    .student-info p { font-size: 0.8rem; color: #6c757d; }
+    .attendance-actions { display: flex; align-items: center; gap: 10px; }
+    
+    /* Log Box */
+    .log-card { background: #eef9ff; border-left: 4px solid #3498db; padding: 10px 15px; border-radius: 4px; margin-bottom: 10px; font-size: 0.9rem; }
+    .report-card-view { background: #fff8e7; border: 1px solid #ffeeba; border-radius: 8px; padding: 15px; margin-top: 15px; }
+  </style>
+</head>
+<body>
+
+<div class="app-container">
+  <header>
+    <h2 id="header-title">Digital Register App</h2>
+    <button id="nav-back-btn" class="btn-back" onclick="goHome()" style="display:none;">Switch Role</button>
+  </header>
+
+  <div id="screen-roles" class="screen active">
+    <h3 style="text-align: center; margin-bottom: 20px;">Select Login Role</h3>
+    <button class="btn btn-primary" onclick="showScreen('screen-teacher-login')">Teacher Login</button>
+    <button class="btn btn-success" onclick="showScreen('screen-parent-login')">Parent Login</button>
+  </div>
+
+  <div id="screen-teacher-login" class="screen">
+    <h3>Teacher Login</h3>
+    <br>
+    <div class="form-group">
+      <label>Teacher Name</label>
+      <input type="text" id="teacher-name" placeholder="Enter full name">
+    </div>
+    <div class="form-group">
+      <label>Class / Grade</label>
+      <input type="text" id="teacher-class" placeholder="e.g. Class 5-A">
+    </div>
+    <div class="form-group">
+      <label>Phone Number</label>
+      <input type="tel" id="teacher-phone" placeholder="Enter phone number">
+    </div>
+    <button class="btn btn-primary" onclick="loginTeacher()">Submit & Open Dashboard</button>
+  </div>
+
+  <div id="screen-teacher-dashboard" class="screen">
+    <div class="section-header">
+      <div>
+        <h3 id="display-teacher-class">Class Register</h3>
+        <input type="date" id="attendance-date" style="margin-top: 5px; width: auto; font-size: 0.85rem;">
+      </div>
+      <button class="btn-icon" title="Add Student" onclick="showScreen('screen-add-student')">+</button>
+    </div>
+
+    <button class="btn btn-primary" onclick="showScreen('screen-progress-card')" style="margin-bottom: 15px;">Go to Progress Cards</button>
+
+    <div id="student-list-container">
+      </div>
+  </div>
+
+  <div id="screen-add-student" class="screen">
+    <h3>Add New Student</h3>
+    <br>
+    <div class="form-group">
+      <label>Student Name</label>
+      <input type="text" id="new-student-name" placeholder="Enter student name">
+    </div>
+    <div class="form-group">
+      <label>Parent Phone Number</label>
+      <input type="tel" id="new-student-phone" placeholder="Enter parent phone number">
+    </div>
+    <button class="btn btn-success" onclick="addStudent()">Save Student</button>
+    <button class="btn btn-primary" onclick="showScreen('screen-teacher-dashboard')" style="margin-top: 10px; background: #6c757d;">Back</button>
+  </div>
+
+  <div id="screen-progress-card" class="screen">
+    <div class="section-header">
+      <h3>Progress Cards</h3>
+      <button class="btn-icon" title="Create Report Card" onclick="showScreen('screen-create-report')">+</button>
+    </div>
+    <p style="font-size: 0.85rem; color: #666; margin-bottom: 15px;">Click + to generate and send a new student report card.</p>
+    <div id="progress-card-history"></div>
+    <button class="btn btn-primary" onclick="showScreen('screen-teacher-dashboard')" style="background: #6c757d; margin-top: 10px;">Back to Register</button>
+  </div>
+
+  <div id="screen-create-report" class="screen">
+    <h3>Fill Student Report Card</h3>
+    <br>
+    <div class="form-group">
+      <label>Select Student</label>
+      <select id="report-student-select"></select>
+    </div>
+    <div class="form-group">
+      <label>Subject & Marks (e.g. Math: 85, Science: 90)</label>
+      <input type="text" id="report-subjects" placeholder="Subjects and marks">
+    </div>
+    <div class="form-group">
+      <label>Internal Marks</label>
+      <input type="number" id="report-internal" placeholder="e.g. 18/20">
+    </div>
+    <div class="form-group">
+      <label>Overall Result Status</label>
+      <select id="report-status">
+        <option value="PASS">PASS</option>
+        <option value="FAIL">FAIL</option>
+      </select>
+    </div>
+    <button class="btn btn-success" onclick="sendReportCard()">Send Progress Card</button>
+    <button class="btn btn-primary" onclick="showScreen('screen-progress-card')" style="margin-top: 10px; background: #6c757d;">Cancel</button>
+  </div>
+
+  <div id="screen-parent-login" class="screen">
+    <h3>Parent Login</h3>
+    <br>
+    <div class="form-group">
+      <label>Parent Name</label>
+      <input type="text" id="parent-name" placeholder="Enter your name">
+    </div>
+    <div class="form-group">
+      <label>Child Name</label>
+      <input type="text" id="parent-child-name" placeholder="Enter child name">
+    </div>
+    <div class="form-group">
+      <label>Registered Phone Number</label>
+      <input type="tel" id="parent-phone" placeholder="Enter registered phone number">
+    </div>
+    <button class="btn btn-success" onclick="loginParent()">Submit & Open Dashboard</button>
+  </div>
+
+  <div id="screen-parent-dashboard" class="screen">
+    <h3>Parent Dashboard</h3>
+    <p style="color: #666; font-size: 0.9rem; margin-bottom: 15px;" id="parent-welcome-msg"></p>
+    
+    <h4>Attendance Notifications</h4>
+    <div id="parent-attendance-logs" style="margin-top: 10px;"></div>
+
+    <h4 style="margin-top: 20px;">Progress Cards</h4>
+    <div id="parent-report-cards"></div>
+  </div>
+</div>
+
+<script>
+  // Application Data State
+  let students = [
+    { id: '1', name: 'Alex Johnson', phone: '9876543210' }
+  ];
+  let attendanceLogs = [];
+  let reportCards = [];
+  let currentParentPhone = '';
+
+  // Initialize Default Date
+  document.getElementById('attendance-date').valueAsDate = new Date();
+
+  function showScreen(screenId) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(screenId).classList.add('active');
+    
+    const backBtn = document.getElementById('nav-back-btn');
+    backBtn.style.display = (screenId === 'screen-roles') ? 'none' : 'block';
+
+    if (screenId === 'screen-teacher-dashboard') renderStudentList();
+    if (screenId === 'screen-create-report') populateStudentDropdown();
+    if (screenId === 'screen-progress-card') renderTeacherReports();
+  }
+
+  function goHome() {
+    showScreen('screen-roles');
+  }
+
+  // Teacher Login
+  function loginTeacher() {
+    const name = document.getElementById('teacher-name').value;
+    const cls = document.getElementById('teacher-class').value;
+    if (!name || !cls) return alert('Please enter Teacher Name and Class');
+    
+    document.getElementById('display-teacher-class').innerText = cls + " Register";
+    showScreen('screen-teacher-dashboard');
+  }
+
+  // Add Student
+  function addStudent() {
+    const name = document.getElementById('new-student-name').value;
+    const phone = document.getElementById('new-student-phone').value;
+    if (!name || !phone) return alert('Fill in all fields');
+
+    students.push({ id: Date.now().toString(), name, phone });
+    document.getElementById('new-student-name').value = '';
+    document.getElementById('new-student-phone').value = '';
+    showScreen('screen-teacher-dashboard');
+  }
+
+  // Render Student Register List
+  function renderStudentList() {
+    const container = document.getElementById('student-list-container');
+    container.innerHTML = '';
+
+    if (students.length === 0) {
+      container.innerHTML = '<p style="color:#888;">No students added yet. Click + to add.</p>';
+      return;
+    }
+
+    students.forEach(student => {
+      const item = document.createElement('div');
+      item.className = 'student-item';
+      item.innerHTML = `
+        <div class="student-info">
+          <h4>${student.name}</h4>
+          <p>Ph: ${student.phone}</p>
+        </div>
+        <div class="attendance-actions">
+          <label style="font-size:0.8rem; margin:0;">
+            <input type="checkbox" onchange="togglePresent('${student.name}', '${student.phone}', this.checked)"> Present
+          </label>
+          <button class="btn-danger" onclick="sendAbsentMsg('${student.name}', '${student.phone}')">Absent</button>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+  }
+
+  // Attendance Message Actions
+  function togglePresent(studentName, phone, isChecked) {
+    if (isChecked) {
+      const msg = `Your child ${studentName} has came to school. Thanks for sending him school.`;
+      attendanceLogs.push({ phone, studentName, message: msg, date: document.getElementById('attendance-date').value });
+      alert(`[SMS Sent to ${phone}]:\n"${msg}"`);
+    }
+  }
+
+  function sendAbsentMsg(studentName, phone) {
+    const msg = `Your child ${studentName} is not came to school today please send your child to school properly. Thank you.`;
+    attendanceLogs.push({ phone, studentName, message: msg, date: document.getElementById('attendance-date').value });
+    alert(`[SMS Sent to ${phone}]:\n"${msg}"`);
+  }
+
+  // Report Card Logic
+  function populateStudentDropdown() {
+    const select = document.getElementById('report-student-select');
+    select.innerHTML = '';
+    students.forEach(s => {
+      select.innerHTML += `<option value="${s.phone}">${s.name}</option>`;
+    });
+  }
+
+  function sendReportCard() {
+    const select = document.getElementById('report-student-select');
+    const phone = select.value;
+    const studentName = select.options[select.selectedIndex].text;
+    const subjects = document.getElementById('report-subjects').value;
+    const internal = document.getElementById('report-internal').value;
+    const status = document.getElementById('report-status').value;
+
+    if (!subjects) return alert('Please enter subjects and marks');
+
+    const reportData = { phone, studentName, subjects, internal, status, date: new Date().toLocaleDateString() };
+    reportCards.push(reportData);
+
+    alert(`Progress Card sent to ${studentName}'s phone (${phone})!`);
+    showScreen('screen-progress-card');
+  }
+
+  function renderTeacherReports() {
+    const container = document.getElementById('progress-card-history');
+    container.innerHTML = '';
+    if (reportCards.length === 0) {
+      container.innerHTML = '<p style="color:#888;">No report cards generated yet.</p>';
+      return;
+    }
+    reportCards.forEach(card => {
+      container.innerHTML += `
+        <div class="log-card">
+          <strong>${card.studentName}</strong> (${card.phone})<br>
+          Subjects: ${card.subjects}<br>
+          Internal: ${card.internal} | Status: <b>${card.status}</b>
+        </div>
+      `;
+    });
+  }
+
+  // Parent Login & Dashboard
+  function loginParent() {
+    const parentName = document.getElementById('parent-name').value;
+    const childName = document.getElementById('parent-child-name').value;
+    const phone = document.getElementById('parent-phone').value;
+
+    if (!parentName || !phone) return alert('Please fill in your details');
+
+    currentParentPhone = phone;
+    document.getElementById('parent-welcome-msg').innerText = `Welcome ${parentName} (${childName}'s Portal)`;
+
+    renderParentDashboard();
+    showScreen('screen-parent-dashboard');
+  }
+
+  function renderParentDashboard() {
+    const logContainer = document.getElementById('parent-attendance-logs');
+    const reportContainer = document.getElementById('parent-report-cards');
+
+    // Filter attendance logs by parent's phone
+    const myLogs = attendanceLogs.filter(log => log.phone === currentParentPhone);
+    logContainer.innerHTML = myLogs.length ? '' : '<p style="color:#888;">No attendance alerts received yet.</p>';
+    myLogs.forEach(log => {
+      logContainer.innerHTML += `<div class="log-card"><b>${log.date}:</b> ${log.message}</div>`;
+    });
+
+    // Filter report cards by parent's phone
+    const myReports = reportCards.filter(rc => rc.phone === currentParentPhone);
+    reportContainer.innerHTML = myReports.length ? '' : '<p style="color:#888;">No report cards received yet.</p>';
+    myReports.forEach(rc => {
+      reportContainer.innerHTML += `
+        <div class="report-card-view">
+          <h4>Report Card - ${rc.studentName}</h4>
+          <p><strong>Date:</strong> ${rc.date}</p>
+          <p><strong>Marks:</strong> ${rc.subjects}</p>
+          <p><strong>Internal Marks:</strong> ${rc.internal}</p>
+          <p><strong>Result:</strong> <span style="color:${rc.status === 'PASS' ? 'green' : 'red'}; font-weight:bold;">${rc.status}</span></p>
+        </div>
+      `;
+    });
+  }
+</script>
+</body>
+</html>
