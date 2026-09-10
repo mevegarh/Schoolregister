@@ -124,9 +124,31 @@
     .rc-footer-summary div strong { color: var(--primary); font-size: 1rem; }
 
     .log-card { background: #f0fdf4; border-left: 4px solid var(--success); padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; font-size: 0.85rem; }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--text-dark);
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      max-width: 90%;
+      text-align: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+      z-index: 999;
+    }
+    #toast.show { opacity: 1; }
   </style>
 </head>
 <body>
+
+<div id="toast"></div>
 
 <div class="app-container">
   <header>
@@ -283,6 +305,27 @@
     localStorage.setItem('app_reportCards', JSON.stringify(reportCards));
   }
 
+  // ---------------- Toast helper (replaces blocking alert()) ----------------
+  function showToast(text, duration = 3000) {
+    const toast = document.getElementById('toast');
+    toast.textContent = text;
+    toast.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => toast.classList.remove('show'), duration);
+  }
+
+  // ---------------- Real SMS handoff to the phone's Messages app ----------------
+  // A website cannot silently send a text message - phones block that for
+  // security/privacy reasons. What we CAN do is open the native Messages
+  // app with the number and text pre-filled, so the teacher just taps Send.
+  // (Fully automatic sending with no tap needed requires a paid SMS
+  // gateway like Twilio running on a backend server.)
+  function openSmsApp(phone, message) {
+    const cleanPhone = phone.replace(/[^\d+]/g, '');
+    const smsUrl = `sms:${cleanPhone}?body=${encodeURIComponent(message)}`;
+    window.location.href = smsUrl;
+  }
+
   function showScreen(screenId) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(screenId).classList.add('active');
@@ -378,7 +421,8 @@
       const msg = `Your child ${studentName} came to school on ${selectedDate}. Thanks for sending them!`;
       attendanceLogs.push({ phone, studentName, message: msg, date: selectedDate, status: 'Present' });
       saveData();
-      alert(`[SMS Sent to ${phone}]:\n"${msg}"`);
+      showToast(`Logged in app. Opening Messages to text ${phone}...`);
+      openSmsApp(phone, msg);
     } else {
       saveData();
     }
@@ -391,7 +435,8 @@
     const msg = `Your child ${studentName} did not come to school on ${selectedDate}. Please ensure regular attendance. Thank you.`;
     attendanceLogs.push({ phone, studentName, message: msg, date: selectedDate, status: 'Absent' });
     saveData();
-    alert(`[SMS Sent to ${phone}]:\n"${msg}"`);
+    showToast(`Logged in app. Opening Messages to text ${phone}...`);
+    openSmsApp(phone, msg);
     renderStudentList();
   }
 
@@ -482,7 +527,12 @@
     reportCards.push(reportData);
     saveData();
 
-    alert(`Progress Card created and sent to ${studentName}'s parent!`);
+    // SMS can't carry a full formatted report card, so we text a short
+    // notification, while the full card is stored and viewable in-app
+    // (both in the Teacher's Progress Cards list and the Parent Dashboard).
+    const smsMsg = `${studentName}'s progress card is ready: ${status}, ${percentage}% (${totalObtained}/${totalMax}). View full details in the Parent Portal.`;
+    showToast(`Saved in app. Opening Messages to text ${phone}...`);
+    openSmsApp(phone, smsMsg);
     resetSubjectRows();
     showScreen('screen-progress-card');
   }
