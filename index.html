@@ -289,20 +289,62 @@
 </div>
 
 <script>
-  // Persistent data initialization using LocalStorage
-  let students = JSON.parse(localStorage.getItem('app_students')) || [
-    { id: '1', name: 'Alex Johnson', phone: '9876543210' }
-  ];
-  let attendanceLogs = JSON.parse(localStorage.getItem('app_attendanceLogs')) || [];
-  let reportCards = JSON.parse(localStorage.getItem('app_reportCards')) || [];
+  // ---------------- Shared data layer ----------------
+  // All teachers and parents opening this app read/write the SAME pool of
+  // data (window.storage with shared:true) so a student a teacher adds, or
+  // a message a teacher sends, immediately shows up when a parent opens
+  // their portal - even in a separate tab/session. Falls back to
+  // localStorage (this device only) if shared storage isn't available.
+  const STORAGE_KEY = 'school-register-data';
+  const DEFAULT_STUDENTS = [{ id: '1', name: 'Alex Johnson', phone: '9876543210' }];
+  const hasCloudStorage = typeof window.storage !== 'undefined';
+
+  let students = DEFAULT_STUDENTS;
+  let attendanceLogs = [];
+  let reportCards = [];
   let currentParentPhone = '';
+  let dataLoaded = false;
 
   document.getElementById('attendance-date').valueAsDate = new Date();
 
-  function saveData() {
-    localStorage.setItem('app_students', JSON.stringify(students));
-    localStorage.setItem('app_attendanceLogs', JSON.stringify(attendanceLogs));
-    localStorage.setItem('app_reportCards', JSON.stringify(reportCards));
+  async function loadData() {
+    if (hasCloudStorage) {
+      try {
+        const result = await window.storage.get(STORAGE_KEY, true);
+        const data = result && result.value ? JSON.parse(result.value) : null;
+        students = (data && data.students) || DEFAULT_STUDENTS;
+        attendanceLogs = (data && data.attendanceLogs) || [];
+        reportCards = (data && data.reportCards) || [];
+      } catch (e) {
+        // Key doesn't exist yet (first run) - use defaults.
+        students = DEFAULT_STUDENTS;
+        attendanceLogs = [];
+        reportCards = [];
+      }
+    } else {
+      students = JSON.parse(localStorage.getItem('app_students')) || DEFAULT_STUDENTS;
+      attendanceLogs = JSON.parse(localStorage.getItem('app_attendanceLogs')) || [];
+      reportCards = JSON.parse(localStorage.getItem('app_reportCards')) || [];
+    }
+    dataLoaded = true;
+  }
+
+  async function saveData() {
+    if (hasCloudStorage) {
+      try {
+        await window.storage.set(
+          STORAGE_KEY,
+          JSON.stringify({ students, attendanceLogs, reportCards }),
+          true
+        );
+      } catch (e) {
+        showToast('Could not save - check your connection and try again.');
+      }
+    } else {
+      localStorage.setItem('app_students', JSON.stringify(students));
+      localStorage.setItem('app_attendanceLogs', JSON.stringify(attendanceLogs));
+      localStorage.setItem('app_reportCards', JSON.stringify(reportCards));
+    }
   }
 
   // ---------------- Toast helper (replaces blocking alert()) ----------------
@@ -326,16 +368,25 @@
     window.location.href = smsUrl;
   }
 
-  function showScreen(screenId) {
+  const DATA_SCREENS = ['screen-teacher-dashboard', 'screen-create-report', 'screen-progress-card', 'screen-parent-dashboard'];
+
+  async function showScreen(screenId) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(screenId).classList.add('active');
     
     const backBtn = document.getElementById('nav-back-btn');
     backBtn.style.display = (screenId === 'screen-roles') ? 'none' : 'block';
 
+    // Always pull the latest shared data before showing a screen that
+    // displays it, so changes made from another tab/portal show up.
+    if (DATA_SCREENS.includes(screenId)) {
+      await loadData();
+    }
+
     if (screenId === 'screen-teacher-dashboard') renderStudentList();
     if (screenId === 'screen-create-report') populateStudentDropdown();
     if (screenId === 'screen-progress-card') renderTeacherReports();
+    if (screenId === 'screen-parent-dashboard') renderParentDashboard();
   }
 
   function goHome() {
@@ -351,7 +402,7 @@
     showScreen('screen-teacher-dashboard');
   }
 
-  function addStudent() {
+  async function addStudent() {
     const nameInput = document.getElementById('new-student-name');
     const phoneInput = document.getElementById('new-student-phone');
 
@@ -363,7 +414,7 @@
     // Create student and push to list
     const newStudent = { id: Date.now().toString(), name, phone };
     students.push(newStudent);
-    saveData();
+    await saveData();
 
     // Reset input fields
     nameInput.value = '';
@@ -372,10 +423,10 @@
     showScreen('screen-teacher-dashboard');
   }
 
-  function deleteStudent(studentId) {
+  async function deleteStudent(studentId) {
     if (confirm('Are you sure you want to delete this student?')) {
       students = students.filter(s => s.id !== studentId);
-      saveData();
+      await saveData();
       renderStudentList();
     }
   }
@@ -413,28 +464,28 @@
     });
   }
 
-  function togglePresent(studentName, phone, isChecked) {
+  async function togglePresent(studentName, phone, isChecked) {
     const selectedDate = document.getElementById('attendance-date').value;
     attendanceLogs = attendanceLogs.filter(log => !(log.phone === phone && log.date === selectedDate));
 
     if (isChecked) {
       const msg = `Your child ${studentName} came to school on ${selectedDate}. Thanks for sending them!`;
       attendanceLogs.push({ phone, studentName, message: msg, date: selectedDate, status: 'Present' });
-      saveData();
+      await saveData();
       showToast(`Logged in app. Opening Messages to text ${phone}...`);
       openSmsApp(phone, msg);
     } else {
-      saveData();
+      await saveData();
     }
   }
 
-  function sendAbsentMsg(studentName, phone) {
+  async function sendAbsentMsg(studentName, phone) {
     const selectedDate = document.getElementById('attendance-date').value;
     attendanceLogs = attendanceLogs.filter(log => !(log.phone === phone && log.date === selectedDate));
 
     const msg = `Your child ${studentName} did not come to school on ${selectedDate}. Please ensure regular attendance. Thank you.`;
     attendanceLogs.push({ phone, studentName, message: msg, date: selectedDate, status: 'Absent' });
-    saveData();
+    await saveData();
     showToast(`Logged in app. Opening Messages to text ${phone}...`);
     openSmsApp(phone, msg);
     renderStudentList();
@@ -479,7 +530,7 @@
     });
   }
 
-  function sendReportCard() {
+  async function sendReportCard() {
     const select = document.getElementById('report-student-select');
     const phone = select.value;
     
@@ -525,7 +576,7 @@
     };
 
     reportCards.push(reportData);
-    saveData();
+    await saveData();
 
     // SMS can't carry a full formatted report card, so we text a short
     // notification, while the full card is stored and viewable in-app
@@ -607,7 +658,7 @@
     currentParentPhone = phone;
     document.getElementById('parent-welcome-msg').innerText = `Welcome ${parentName} (${childName || 'Student'}'s Portal)`;
 
-    renderParentDashboard();
+    // showScreen loads the latest shared data and renders the dashboard.
     showScreen('screen-parent-dashboard');
   }
 
@@ -627,6 +678,9 @@
       reportContainer.innerHTML += createReportCardHTML(rc);
     });
   }
+
+  // Warm the cache on first load so data is ready the moment a screen needs it.
+  loadData();
 </script>
 </body>
 </html>
