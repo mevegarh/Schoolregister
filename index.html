@@ -123,6 +123,24 @@
     }
     .rc-footer-summary div strong { color: var(--primary); font-size: 1rem; }
 
+    .rc-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .btn-edit {
+      background: #e0e7ff;
+      color: var(--primary);
+      border: none;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-edit:hover { background: #c7d2fe; }
+
     .log-card { background: #f0fdf4; border-left: 4px solid var(--success); padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; font-size: 0.85rem; }
 
     /* Toast */
@@ -215,15 +233,16 @@
   <div id="screen-progress-card" class="screen">
     <div class="section-header">
       <h3>Progress Cards</h3>
-      <button class="btn-icon" title="Create Progress Card" onclick="showScreen('screen-create-report')">+</button>
+      <button class="btn-icon" title="Create Progress Card" onclick="startNewReport()">+</button>
     </div>
+    <button class="btn btn-danger" style="width: 100%; margin-bottom: 16px; padding: 10px;" onclick="deleteAllReportCards()">Delete All Progress Cards</button>
     <div id="progress-card-history"></div>
     <button class="btn btn-secondary" onclick="showScreen('screen-teacher-dashboard')">Back to Register</button>
   </div>
 
   <!-- 6. Create Progress Card Form -->
   <div id="screen-create-report" class="screen">
-    <h3 style="margin-bottom: 16px;">Create Academic Progress Card</h3>
+    <h3 id="create-report-title" style="margin-bottom: 16px;">Create Academic Progress Card</h3>
     
     <div class="form-group">
       <label>Select Student</label>
@@ -253,8 +272,8 @@
       </select>
     </div>
 
-    <button class="btn btn-success" onclick="sendReportCard()">Send Progress Card to Parent</button>
-    <button class="btn btn-secondary" onclick="showScreen('screen-progress-card')" style="margin-top: 10px;">Cancel</button>
+    <button class="btn btn-success" id="report-submit-btn" onclick="sendReportCard()">Send Progress Card to Parent</button>
+    <button class="btn btn-secondary" onclick="cancelReportForm()" style="margin-top: 10px;">Cancel</button>
   </div>
 
   <!-- 7. Parent Login -->
@@ -304,6 +323,8 @@
   let reportCards = [];
   let currentParentPhone = '';
   let dataLoaded = false;
+  let editingReportId = null;
+  let editingReportDate = null;
 
   document.getElementById('attendance-date').valueAsDate = new Date();
 
@@ -530,6 +551,51 @@
     });
   }
 
+  function startNewReport() {
+    editingReportId = null;
+    editingReportDate = null;
+    document.getElementById('create-report-title').innerText = 'Create Academic Progress Card';
+    document.getElementById('report-submit-btn').innerText = 'Send Progress Card to Parent';
+    resetSubjectRows();
+    showScreen('screen-create-report');
+  }
+
+  function cancelReportForm() {
+    editingReportId = null;
+    editingReportDate = null;
+    resetSubjectRows();
+    showScreen('screen-progress-card');
+  }
+
+  async function editReportCard(cardId) {
+    const card = reportCards.find(rc => rc.id === cardId);
+    if (!card) return;
+
+    editingReportId = card.id;
+    editingReportDate = card.date;
+
+    await showScreen('screen-create-report'); // loads data & populates the student dropdown
+
+    document.getElementById('create-report-title').innerText = 'Edit Academic Progress Card';
+    document.getElementById('report-submit-btn').innerText = 'Update Progress Card';
+    document.getElementById('report-student-select').value = card.phone;
+    document.getElementById('report-internal').value = card.internal;
+    document.getElementById('report-status').value = card.status;
+
+    const container = document.getElementById('subject-rows-container');
+    container.innerHTML = '';
+    card.subjects.forEach(s => {
+      const row = document.createElement('div');
+      row.className = 'subject-row';
+      row.innerHTML = `
+        <input type="text" class="sub-name" value="${s.name}" placeholder="Subject Name">
+        <input type="number" class="sub-marks" value="${s.score}" placeholder="Marks" style="width: 100px;">
+        <input type="number" class="sub-max" value="${s.max}" placeholder="Max" style="width: 90px;">
+      `;
+      container.appendChild(row);
+    });
+  }
+
   async function sendReportCard() {
     const select = document.getElementById('report-student-select');
     const phone = select.value;
@@ -561,9 +627,10 @@
     if (subjectList.length === 0) return alert('Please enter at least one subject with valid marks.');
 
     let percentage = ((totalObtained / totalMax) * 100).toFixed(1);
+    const isEditing = editingReportId !== null;
 
     const reportData = {
-      id: Date.now().toString(),
+      id: isEditing ? editingReportId : Date.now().toString(),
       phone,
       studentName,
       subjects: subjectList,
@@ -572,24 +639,36 @@
       totalObtained,
       totalMax,
       percentage,
-      date: new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
+      date: isEditing ? editingReportDate : new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
     };
 
-    reportCards.push(reportData);
+    if (isEditing) {
+      reportCards = reportCards.map(rc => rc.id === editingReportId ? reportData : rc);
+    } else {
+      reportCards.push(reportData);
+    }
     await saveData();
 
     // SMS can't carry a full formatted report card, so we text a short
     // notification, while the full card is stored and viewable in-app
     // (both in the Teacher's Progress Cards list and the Parent Dashboard).
-    const smsMsg = `${studentName}'s progress card is ready: ${status}, ${percentage}% (${totalObtained}/${totalMax}). View full details in the Parent Portal.`;
-    showToast(`Saved in app. Opening Messages to text ${phone}...`);
+    const smsMsg = isEditing
+      ? `${studentName}'s progress card has been updated: ${status}, ${percentage}% (${totalObtained}/${totalMax}). View full details in the Parent Portal.`
+      : `${studentName}'s progress card is ready: ${status}, ${percentage}% (${totalObtained}/${totalMax}). View full details in the Parent Portal.`;
+    showToast(isEditing ? `Updated. Opening Messages to notify ${phone}...` : `Saved in app. Opening Messages to text ${phone}...`);
     openSmsApp(phone, smsMsg);
+
+    editingReportId = null;
+    editingReportDate = null;
+    document.getElementById('create-report-title').innerText = 'Create Academic Progress Card';
+    document.getElementById('report-submit-btn').innerText = 'Send Progress Card to Parent';
+
     resetSubjectRows();
     showScreen('screen-progress-card');
   }
 
   // Render Visual Progress Card Component
-  function createReportCardHTML(card) {
+  function createReportCardHTML(card, showActions = false) {
     let rowsHTML = card.subjects.map(s => `
       <tr>
         <td>${s.name}</td>
@@ -597,6 +676,13 @@
         <td style="color: var(--text-muted);">${s.max}</td>
       </tr>
     `).join('');
+
+    const actionsHTML = showActions
+      ? `<div class="rc-actions">
+           <button class="btn-edit" onclick="editReportCard('${card.id}')">Edit</button>
+           <button class="btn-danger" onclick="deleteReportCard('${card.id}')">Delete</button>
+         </div>`
+      : '';
 
     return `
       <div class="report-card-premium">
@@ -607,6 +693,8 @@
           </div>
           <span class="status-badge ${card.status === 'PASS' ? 'status-pass' : 'status-fail'}">${card.status}</span>
         </div>
+
+        ${actionsHTML}
         
         <div class="rc-student-meta">
           <div><span>Student:</span> <strong>${card.studentName}</strong></div>
@@ -644,8 +732,24 @@
       return;
     }
     reportCards.forEach(card => {
-      container.innerHTML += createReportCardHTML(card);
+      container.innerHTML += createReportCardHTML(card, true);
     });
+  }
+
+  async function deleteReportCard(cardId) {
+    if (!confirm('Delete this progress card? This cannot be undone.')) return;
+    reportCards = reportCards.filter(rc => rc.id !== cardId);
+    await saveData();
+    renderTeacherReports();
+  }
+
+  async function deleteAllReportCards() {
+    if (reportCards.length === 0) return showToast('No progress cards to delete.');
+    if (!confirm('Delete ALL progress cards for ALL students? This cannot be undone.')) return;
+    reportCards = [];
+    await saveData();
+    renderTeacherReports();
+    showToast('All progress cards deleted.');
   }
 
   function loginParent() {
