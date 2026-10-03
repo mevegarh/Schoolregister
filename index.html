@@ -308,15 +308,14 @@
 </div>
 
 <script>
-  // ---------------- Shared data layer ----------------
-  // All teachers and parents opening this app read/write the SAME pool of
-  // data (window.storage with shared:true) so a student a teacher adds, or
-  // a message a teacher sends, immediately shows up when a parent opens
-  // their portal - even in a separate tab/session. Falls back to
-  // localStorage (this device only) if shared storage isn't available.
-  const STORAGE_KEY = 'school-register-data';
+  // ---------------- Shared data layer (Google Apps Script + Sheets) ----------------
+  // All teachers and parents, on any phone, read and write through the SAME
+  // Apps Script web app, which stores the data in a Google Sheet - so a
+  // student a teacher adds, or a message a teacher sends, shows up for a
+  // parent on a completely different device.
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyRAQs_7ThuJtYtCPFIIQYxixHi-3H8FKUoeIu6p7voSYG0Zg0fd-KmVmZwOQ4ClzjAZQ/exec';
+
   const DEFAULT_STUDENTS = [{ id: '1', name: 'Alex Johnson', phone: '9876543210' }];
-  const hasCloudStorage = typeof window.storage !== 'undefined';
 
   let students = DEFAULT_STUDENTS;
   let attendanceLogs = [];
@@ -329,42 +328,30 @@
   document.getElementById('attendance-date').valueAsDate = new Date();
 
   async function loadData() {
-    if (hasCloudStorage) {
-      try {
-        const result = await window.storage.get(STORAGE_KEY, true);
-        const data = result && result.value ? JSON.parse(result.value) : null;
-        students = (data && data.students) || DEFAULT_STUDENTS;
-        attendanceLogs = (data && data.attendanceLogs) || [];
-        reportCards = (data && data.reportCards) || [];
-      } catch (e) {
-        // Key doesn't exist yet (first run) - use defaults.
-        students = DEFAULT_STUDENTS;
-        attendanceLogs = [];
-        reportCards = [];
-      }
-    } else {
-      students = JSON.parse(localStorage.getItem('app_students')) || DEFAULT_STUDENTS;
-      attendanceLogs = JSON.parse(localStorage.getItem('app_attendanceLogs')) || [];
-      reportCards = JSON.parse(localStorage.getItem('app_reportCards')) || [];
+    try {
+      const res = await fetch(APPS_SCRIPT_URL);
+      const text = await res.text();
+      const data = text && text.trim() ? JSON.parse(text) : {};
+      students = data.students || DEFAULT_STUDENTS;
+      attendanceLogs = data.attendanceLogs || [];
+      reportCards = data.reportCards || [];
+    } catch (e) {
+      showToast('Could not reach the server - check your internet connection.');
     }
     dataLoaded = true;
   }
 
   async function saveData() {
-    if (hasCloudStorage) {
-      try {
-        await window.storage.set(
-          STORAGE_KEY,
-          JSON.stringify({ students, attendanceLogs, reportCards }),
-          true
-        );
-      } catch (e) {
-        showToast('Could not save - check your connection and try again.');
-      }
-    } else {
-      localStorage.setItem('app_students', JSON.stringify(students));
-      localStorage.setItem('app_attendanceLogs', JSON.stringify(attendanceLogs));
-      localStorage.setItem('app_reportCards', JSON.stringify(reportCards));
+    try {
+      // Content-Type text/plain avoids a CORS preflight, which Apps Script
+      // web apps don't handle - this keeps the request a "simple" POST.
+      await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ students, attendanceLogs, reportCards })
+      });
+    } catch (e) {
+      showToast('Could not save - check your internet connection and try again.');
     }
   }
 
