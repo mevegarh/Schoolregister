@@ -143,6 +143,16 @@
 
     .log-card { background: #f0fdf4; border-left: 4px solid var(--success); padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; font-size: 0.85rem; }
 
+    /* Attendance History */
+    .history-date-group { margin-bottom: 18px; }
+    .history-date-heading { font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+    .history-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 8px; margin-bottom: 6px; font-size: 0.88rem; }
+    .history-item.present { background: #f0fdf4; border-left: 4px solid var(--success); }
+    .history-item.absent { background: #fef2f2; border-left: 4px solid var(--danger); }
+    .history-item span.history-status { font-weight: 700; font-size: 0.75rem; text-transform: uppercase; }
+    .history-item.present span.history-status { color: #065f46; }
+    .history-item.absent span.history-status { color: #991b1b; }
+
     /* Toast */
     #toast {
       position: fixed;
@@ -209,9 +219,17 @@
       <button class="btn-icon" title="Add Student" onclick="showScreen('screen-add-student')">+</button>
     </div>
 
-    <button class="btn btn-primary" onclick="showScreen('screen-progress-card')" style="margin-bottom: 16px;">View & Generate Progress Cards</button>
+    <button class="btn btn-primary" onclick="showScreen('screen-progress-card')" style="margin-bottom: 10px;">View & Generate Progress Cards</button>
+    <button class="btn btn-secondary" onclick="showScreen('screen-attendance-history')" style="margin-bottom: 16px;">View Attendance History</button>
 
     <div id="student-list-container"></div>
+  </div>
+
+  <!-- 3b. Attendance History (Teacher) -->
+  <div id="screen-attendance-history" class="screen">
+    <h3 style="margin-bottom: 16px;">Attendance History</h3>
+    <div id="attendance-history-container"></div>
+    <button class="btn btn-secondary" onclick="showScreen('screen-teacher-dashboard')">Back to Register</button>
   </div>
 
   <!-- 4. Add Student -->
@@ -376,7 +394,7 @@
     window.location.href = smsUrl;
   }
 
-  const DATA_SCREENS = ['screen-teacher-dashboard', 'screen-create-report', 'screen-progress-card', 'screen-parent-dashboard'];
+  const DATA_SCREENS = ['screen-teacher-dashboard', 'screen-create-report', 'screen-progress-card', 'screen-parent-dashboard', 'screen-attendance-history'];
 
   async function showScreen(screenId) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -395,6 +413,51 @@
     if (screenId === 'screen-create-report') populateStudentDropdown();
     if (screenId === 'screen-progress-card') renderTeacherReports();
     if (screenId === 'screen-parent-dashboard') renderParentDashboard();
+    if (screenId === 'screen-attendance-history') renderAttendanceHistory();
+  }
+
+  function renderAttendanceHistory() {
+    const container = document.getElementById('attendance-history-container');
+    container.innerHTML = '';
+
+    if (attendanceLogs.length === 0) {
+      container.innerHTML = '<p style="color:#888; text-align:center; padding:15px;">No attendance records yet.</p>';
+      return;
+    }
+
+    // Group logs by date, newest date first.
+    const byDate = {};
+    attendanceLogs.forEach(log => {
+      if (!byDate[log.date]) byDate[log.date] = [];
+      byDate[log.date].push(log);
+    });
+
+    const dates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
+
+    dates.forEach(date => {
+      const group = document.createElement('div');
+      group.className = 'history-date-group';
+
+      const heading = document.createElement('div');
+      heading.className = 'history-date-heading';
+      heading.innerText = date;
+      group.appendChild(heading);
+
+      byDate[date]
+        .slice()
+        .sort((a, b) => a.studentName.localeCompare(b.studentName))
+        .forEach(log => {
+          const item = document.createElement('div');
+          item.className = `history-item ${log.status === 'Present' ? 'present' : 'absent'}`;
+          item.innerHTML = `
+            <span>${log.studentName}</span>
+            <span class="history-status">${log.status}</span>
+          `;
+          group.appendChild(item);
+        });
+
+      container.appendChild(group);
+    });
   }
 
   function goHome() {
