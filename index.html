@@ -338,6 +338,8 @@
   let students = DEFAULT_STUDENTS;
   let attendanceLogs = [];
   let reportCards = [];
+  let teacherLogins = [];
+  let parentLogins = [];
   let currentParentPhone = '';
   let dataLoaded = false;
   let editingReportId = null;
@@ -345,14 +347,25 @@
 
   document.getElementById('attendance-date').valueAsDate = new Date();
 
+  // Google Sheets auto-converts numeric-looking text (like phone numbers
+  // and our Date.now()-based ids) into actual numbers when storing them.
+  // When read back, they come as JS numbers instead of strings, which then
+  // fail to match against the strings used everywhere else in the app
+  // (input values, template-literal onclick args, etc). Normalizing every
+  // phone/id to a string right after loading fixes all of those mismatches
+  // in one place instead of needing fixes scattered across every comparison.
+  function toStr(v) { return v === undefined || v === null ? v : String(v); }
+
   async function loadData() {
     try {
       const res = await fetch(APPS_SCRIPT_URL);
       const text = await res.text();
       const data = text && text.trim() ? JSON.parse(text) : {};
-      students = data.students || DEFAULT_STUDENTS;
-      attendanceLogs = data.attendanceLogs || [];
-      reportCards = data.reportCards || [];
+      students = (data.students || DEFAULT_STUDENTS).map(s => ({ ...s, id: toStr(s.id), phone: toStr(s.phone) }));
+      attendanceLogs = (data.attendanceLogs || []).map(l => ({ ...l, phone: toStr(l.phone) }));
+      reportCards = (data.reportCards || []).map(c => ({ ...c, id: toStr(c.id), phone: toStr(c.phone) }));
+      teacherLogins = (data.teacherLogins || []).map(t => ({ ...t, phone: toStr(t.phone) }));
+      parentLogins = (data.parentLogins || []).map(p => ({ ...p, phone: toStr(p.phone) }));
     } catch (e) {
       showToast('Could not reach the server - check your internet connection.');
     }
@@ -366,7 +379,7 @@
       await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ students, attendanceLogs, reportCards })
+        body: JSON.stringify({ students, attendanceLogs, reportCards, teacherLogins, parentLogins })
       });
     } catch (e) {
       showToast('Could not save - check your internet connection and try again.');
@@ -464,11 +477,21 @@
     showScreen('screen-roles');
   }
 
-  function loginTeacher() {
+  async function loginTeacher() {
     const name = document.getElementById('teacher-name').value.trim();
     const cls = document.getElementById('teacher-class').value.trim();
+    const phone = document.getElementById('teacher-phone').value.trim();
     if (!name || !cls) return alert('Please enter Name and Class');
-    
+
+    // Pull the latest data first so this login record doesn't overwrite
+    // anything another phone just saved.
+    await loadData();
+    teacherLogins.push({
+      name, class: cls, phone,
+      loginAt: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+    });
+    await saveData();
+
     document.getElementById('display-teacher-class').innerText = cls + " Register";
     showScreen('screen-teacher-dashboard');
   }
@@ -802,7 +825,7 @@
     showToast('All progress cards deleted.');
   }
 
-  function loginParent() {
+  async function loginParent() {
     const parentName = document.getElementById('parent-name').value.trim();
     const childName = document.getElementById('parent-child-name').value.trim();
     const phone = document.getElementById('parent-phone').value.trim();
@@ -812,7 +835,16 @@
     currentParentPhone = phone;
     document.getElementById('parent-welcome-msg').innerText = `Welcome ${parentName} (${childName || 'Student'}'s Portal)`;
 
-    // showScreen loads the latest shared data and renders the dashboard.
+    // Pull the latest data first so this login record doesn't overwrite
+    // anything another phone just saved.
+    await loadData();
+    parentLogins.push({
+      parentName, childName, phone,
+      loginAt: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+    });
+    await saveData();
+
+    // showScreen loads the latest shared data again and renders the dashboard.
     showScreen('screen-parent-dashboard');
   }
 
